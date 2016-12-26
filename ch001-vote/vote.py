@@ -14,6 +14,8 @@ REDISKEY_SET_VOTED_PRE = 'voted:'
 REDISKEY_ZSET_ARTICLE_TIME_ORDER = 'article:timeorder'
 REDISKEY_ZSET_ARTICLE_SCORE_ORDER = 'article:scoreorder'
 
+REDISKEY_GROUP_PRE = 'group:'
+
 conn = redis.Redis(host='192.168.0.226', port=6379, db=8)
 
 def run(conn):
@@ -49,6 +51,8 @@ def post_article(conn, user, title, link):
     conn.zadd(REDISKEY_ZSET_ARTICLE_SCORE_ORDER, article, now + VOTE_SCORE)
     conn.zadd(REDISKEY_ZSET_ARTICLE_TIME_ORDER, article, now)
 
+    init_group_data(conn=conn, article_id=article_id)
+
 def get_articles(conn, page, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER):
     start = (page - 1) * ARTICLES_PER_PAGE
     end = start + ARTICLES_PER_PAGE - 1
@@ -61,7 +65,32 @@ def get_articles(conn, page, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER):
         articles.append(article_data)
     return articles
 
+def add_remove_groups(conn, article_id, to_add=[], to_remove=[]):
+    article = REDISKEY_HASH_ARTICLE_PRE + str(article_id)
+    for group in to_add:
+        conn.sadd(REDISKEY_GROUP_PRE + group, article)
+    for group in to_remove:
+        conn.srem(REDISKEY_GROUP_PRE + group , article)
+
+def get_group_articles(conn, group, page, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER):
+    key = order + group
+    if not conn.exists(key):
+        conn.zinterstore(key, 
+            [REDISKEY_GROUP_PRE + group, order],
+            aggregate = 'max',
+        )
+        conn.expire(key, 60)
+    return get_articles(conn, page, key)
+
+def init_group_data(conn, article_id):
+    add_remove_groups(conn = conn, article_id = article_id, to_add = ['lizhen', 'aa'])
+
+
+
 run(conn)
 
-articles = get_articles(conn=conn, page=1, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER)
-printPretty(articles)
+printPretty(get_group_articles(conn, 'aa', 1))
+
+# init_group_data(conn)
+# articles = get_articles(conn=conn, page=1, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER)
+# printPretty(articles)
