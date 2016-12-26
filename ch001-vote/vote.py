@@ -4,7 +4,7 @@ import json
 
 INIT_ARTICLE_ID = 10000
 ONE_WEEK_IN_SECONDS = 86400 * 7
-VOTE_SCORE = 432
+VOTE_SCORE = 4320000
 
 ARTICLES_PER_PAGE = 25
 
@@ -30,6 +30,18 @@ def generate_article_id(conn):
         return INIT_ARTICLE_ID
     else:
         return conn.incr(REDISKEY_ARTICLE_ID)
+
+def article_vote(conn, user, article):
+    cutoff = time.time() - ONE_WEEK_IN_SECONDS
+
+    if conn.zscore(REDISKEY_ZSET_ARTICLE_TIME_ORDER, article) < cutoff:
+        return
+    
+    article_id = article.partition(':')[-1]
+    if conn.sadd(REDISKEY_SET_VOTED_PRE + article_id, user):
+        printPretty(conn.zincrby(REDISKEY_ZSET_ARTICLE_SCORE_ORDER, article, VOTE_SCORE))
+        printPretty(conn.hincrby(article, 'votes', 1))
+
 
 def post_article(conn, user, title, link):
     article_id = str(generate_article_id(conn))
@@ -85,12 +97,15 @@ def get_group_articles(conn, group, page, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDE
 def init_group_data(conn, article_id):
     add_remove_groups(conn = conn, article_id = article_id, to_add = ['lizhen', 'aa'])
 
-
-
 run(conn)
 
-printPretty(get_group_articles(conn, 'aa', 1))
+# article_vote(conn=conn, user=123, article=REDISKEY_HASH_ARTICLE_PRE + '10005')
+# article_vote(conn=conn, user=time.time(), article=REDISKEY_HASH_ARTICLE_PRE + '10005')
+
+# printPretty(get_articles(conn, 1))
+
+# printPretty(get_group_articles(conn, 'aa', 1))
 
 # init_group_data(conn)
-# articles = get_articles(conn=conn, page=1, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER)
-# printPretty(articles)
+articles = get_articles(conn=conn, page=1, order=REDISKEY_ZSET_ARTICLE_SCORE_ORDER)
+printPretty(articles)
